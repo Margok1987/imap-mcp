@@ -12,6 +12,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      last in the file so the link definitions come along. -->
 <!-- #region changelog -->
 
+## [0.5.1] - 2026-09-29
+
+### Fixed
+
+- The process no longer exits when the server drops an idle connection. imapflow
+  reports a dead socket as an `error` event, and with nobody listening Node ended
+  the process about 20 seconds after the first call, taking every tool with it.
+  The connection is now dropped and the next call reconnects. Reported and fixed
+  by @Reconnact (#31, #32).
+- A connection the server closes cleanly, without an error, is dropped as well,
+  so the first call after it no longer fails once on the dead connection before
+  the retry reconnects.
+- Shutting down no longer throws when the logout fails after the connection has
+  already reported its close.
+- An attachment name keeps a leading dot only when that dot names its
+  extension. A name like `..!` (or `︰!`, which Unicode normalisation turns into
+  it) came out as `.!`, dotfile-shaped with nothing behind the dot to check.
+  The `.exe` case from 0.5.0 still keeps its dot, so the executable check still
+  reads the extension.
+
+### Changed
+
+- imapflow 2 (from 1.7), and the Node base image of the container moved to the
+  current digest.
+
 ## [0.5.0] - 2026-09-07
 
 ### Added
@@ -601,6 +626,7 @@ package page for the first time — including the parts that changed weeks ago.
 - Every change to the mailbox is logged to stderr with UIDs and folder, never
   subjects.
 
+[0.5.1]: https://github.com/ni-c/imap-mcp/releases/tag/v0.5.1
 [0.5.0]: https://github.com/ni-c/imap-mcp/releases/tag/v0.5.0
 [0.4.0]: https://github.com/ni-c/imap-mcp/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ni-c/imap-mcp/releases/tag/v0.3.0
