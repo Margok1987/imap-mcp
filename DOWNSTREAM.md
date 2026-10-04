@@ -1,65 +1,56 @@
-# LeseKita downstream fork
+# Downstream rich-draft fork
 
 This repository is a GitHub fork of `ni-c/imap-mcp`.
 
 ## Purpose
 
-The branch `lesekita-v0.5.1` is the pinned source for the dedicated
-`pia.loeber-wille@lesekitas.de` mailbox used by the Wörter.Wunder.Welten /
-Save the Children LeseKitas workflow.
-
-It starts from upstream release `v0.5.1`, commit
+The branch `lesekita-v0.5.1` is the pinned source used by the dedicated
+LeseKita mailbox runtime. It starts from upstream release `v0.5.1`, commit
 `a959cd351c84f5e73b573feb1e5af19b3c0a0141`.
 
-The downstream change is deliberately narrow:
+The downstream change is deliberately technical and generic:
 
 - keep all upstream IMAP read/search/filing behavior;
 - keep the original plain-text `save_draft`;
-- add `save_lesekita_draft` for this one mailbox identity;
-- append the complete fixed LeseKita signature server-side;
-- generate multipart text/plain + text/html MIME;
-- embed exactly one canonical signature image with CID
-  `lesekita-pia-signature-logo-v1`;
-- pin and verify the signature image by SHA-256
-  `1dd7a6d74947d2615cf868bc19cc020fa9f022b94cf6e44630fb03cc9407adb3`;
+- add `save_rich_draft` for complete caller-supplied HTML drafts;
+- accept an explicit plain-text fallback;
+- accept bounded inline PNG/JPEG/GIF CID images;
+- require every supplied inline image to be referenced by HTML and every CID reference to resolve;
+- reject remote HTTP(S) image sources;
 - preserve native reply threading through `In-Reply-To` and `References`;
 - retain the upstream security property that the MCP server **cannot send mail**.
 
-The business body is supplied as plain text. The caller does not supply signature HTML,
-a CID, a logo path, or a sender identity. Those are fixed by the downstream operation.
+## Deliberate non-responsibility
 
-## Identity boundary
+The MCP does **not** own brand identity, signature text, logo selection, signature
+CID naming, or business approval.
 
-`save_lesekita_draft` refuses execution unless the configured IMAP user is exactly:
+For LeseKita those belong to `www-operations`, specifically the dedicated
+LeseKita outbound-mail skill and its canonical signature asset/profile.
 
-`pia.loeber-wille@lesekitas.de`
+That mirrors the WWW architecture: the business layer composes the approved HTML
+and chooses the canonical image; the mail transport only persists the exact draft.
 
-This is intentional. The tool is not a general HTML-mail composer.
+## Safety bounds
 
-## Canonical asset
+`save_rich_draft`:
 
-`assets/lesekita-pia-signature-v1.jpg`
-
-Source: extracted from an existing sent message in Pia's real LeseKita mailbox.
-
-Verified properties:
-
-- MIME: `image/jpeg`
-- dimensions: 1571 x 830
-- bytes: 240123
-- SHA-256: `1dd7a6d74947d2615cf868bc19cc020fa9f022b94cf6e44630fb03cc9407adb3`
-
-Runtime code re-hashes the file before composing a LeseKita draft and fails closed on
-mismatch.
+- uses the configured IMAP user as sender; no caller-selected From;
+- allows at most 5 inline images;
+- allows only PNG, JPEG and GIF inline parts;
+- caps one inline image at 1 MiB and all inline images at 2 MiB total;
+- requires safe filenames and CID tokens;
+- rejects unresolved or unused CIDs;
+- rejects remote HTTP(S) image sources;
+- validates canonical base64 before APPEND;
+- has no send, SMTP, reply-send or forward-send capability.
 
 ## Operational review gate
 
-This repository enforces technical draft semantics only. The WWW consumer process owns
-business approval:
+The technical server does not replace business approval. The WWW consumer process
+owns the LeseKita sequence:
 
-`Dennis exact-text approval -> Pia Slack approval -> native LeseKita draft -> separate human send`
-
-The MCP itself exposes no send operation.
+`Dennis exact-text approval -> Pia Slack approval -> native rich draft -> separate human send`
 
 ## Deployment authority
 
