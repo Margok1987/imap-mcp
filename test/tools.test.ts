@@ -32,7 +32,7 @@ const WRITE_TOOLS = [
   'manage_mailbox',
   'move_messages',
   'save_draft',
-  'save_lesekita_draft',
+  'save_rich_draft',
   'set_message_flags',
 ];
 
@@ -161,7 +161,7 @@ describe('tool registration', () => {
       'manage_mailbox',
       'move_messages',
       'save_draft',
-      'save_lesekita_draft',
+      'save_rich_draft',
       'set_message_flags',
     ]);
     await harness.close();
@@ -205,7 +205,7 @@ describe('tool registration', () => {
     // reference to the old ones stops working.
     expect(byName.get('move_messages')?.destructiveHint).toBe(true);
     expect(byName.get('save_draft')?.destructiveHint).toBe(false);
-    expect(byName.get('save_lesekita_draft')?.destructiveHint).toBe(false);
+    expect(byName.get('save_rich_draft')?.destructiveHint).toBe(false);
     await harness.close();
   });
 
