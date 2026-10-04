@@ -31,7 +31,7 @@ Registered only when `IMAP_READ_ONLY=false`.
 | `move_messages` 👤     | Move or copy messages between folders. **essential**                                     |
 | `delete_messages` 👤   | Delete: sets `\Deleted` and expunges. Not the same as moving to Trash                    |
 | `save_draft`           | Append a plain-text draft to the drafts folder. This server never **sends** anything     |
-| `save_lesekita_draft`  | Append the identity-bound LeseKita HTML/CID draft with the pinned inline signature image |
+| `save_rich_draft`  | Append a caller-supplied HTML draft with plain-text fallback and bounded inline CID images |
 | `manage_mailbox` 👤    | Create, rename and delete folders — 👤 for `delete`, 🔒 for `rename`, nothing for `create` |
 
 👤 **asks a person** through MCP elicitation, a dialog the model cannot answer on its
