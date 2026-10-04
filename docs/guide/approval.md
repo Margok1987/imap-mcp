@@ -25,7 +25,7 @@ answer comes back, nothing happens.
 | `manage_mailbox` with `action: "delete"` | always |
 | `manage_mailbox` with `action: "rename"` | two-call token only — a rename is reversible |
 | `manage_mailbox` with `action: "create"` | never |
-| `set_message_flags` · `save_draft` · `save_lesekita_draft` | never |
+| `set_message_flags` · `save_draft` · `save_rich_draft` | never |
 
 `move_messages` was on the token alone until now, on the grounds that a move
 destroys nothing. Its own comment already said what is wrong with that:
