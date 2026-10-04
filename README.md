@@ -1,5 +1,7 @@
 # imap-mcp
 
+> **Downstream fork notice:** This branch is maintained for the Wörter.Wunder.Welten / LeseKitas runtime. It is based on upstream v0.5.1 and adds one narrow identity-bound draft operation only. See [DOWNSTREAM.md](DOWNSTREAM.md). Upstream remains `ni-c/imap-mcp`.
+
 <!-- badges: start -->
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ni-c/imap-mcp/ci.yml?branch=main&label=CI)](https://github.com/ni-c/imap-mcp/actions/workflows/ci.yml)
@@ -23,8 +25,8 @@ Lets MCP clients like Claude Code, Claude Desktop or Codex read and search your 
 it into folders, save attachments and draft replies — with every message fenced as untrusted
 content, and the write tools off unless you turn them on.
 
-Eleven tools, not fifty: a mail account is a workflow, not an API surface, so related
-operations are folded into one tool with a mode rather than split across many. And eleven is
+Twelve tools in this downstream branch, not fifty: a mail account is a workflow, not an API surface, so related
+operations are folded into one tool with a mode rather than split across many. And twelve is
 the ceiling, not the floor — `IMAP_ALLOW_TOOLS=essential` registers a curated six instead, and
 under the read-only default that narrows to four. See
 [choosing which tools load](#choosing-which-tools-load).
@@ -49,14 +51,15 @@ untrusted content, and a channel to the outside world is exploitable by anyone w
 message in the inbox — the pattern that produced
 [EchoLeak](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2025-32711), where one
 crafted email exfiltrated internal data from Microsoft 365 Copilot with no user interaction.
-This server has the first two and deliberately not the third. `save_draft` writes the reply
-into your Drafts folder; you send it from your own mail client. No amount of clever text in a
-message can make this server post anything anywhere.
+This server has the first two and deliberately not the third. `save_draft` writes a plain-text reply
+into your Drafts folder; the downstream-only `save_lesekita_draft` writes an identity-bound HTML/CID
+LeseKita draft with the pinned signature image. Neither tool can send. You send from your own mail
+client. No amount of clever text in a message can make this server post anything anywhere.
 
 **Writes are off until you turn them on.** With only `IMAP_HOST`, `IMAP_USER` and
 `IMAP_PASSWORD` set, the server registers six read tools and nothing else. The mailbox tools
 appear with `IMAP_READ_ONLY=false` — note the default is `true`, the opposite of the other
-servers in this family, because this one reaches a mailbox. Tools that are off are not registered at all — a
+servers in this family, because this one reaches a mailbox. In this LeseKita downstream branch that means six write tools. Tools that are off are not registered at all — a
 capability the model cannot see is one it cannot be talked into using.
 
 **Mail is treated as hostile input, because it is.** Anyone in the world can put text in your
@@ -112,7 +115,7 @@ guard. See [Asking a person](https://imap-mcp.ni-c.de/guide/approval).
 | `IMAP_PORT`                 | no       | `993` / `143` | Defaults by TLS mode                                         |
 | `IMAP_TLS`                  | no       | `implicit`    | `implicit`, `starttls` or `none`                             |
 | `IMAP_MAILBOX`              | no       | `INBOX`       | Mailbox the message tools default to                         |
-| `IMAP_READ_ONLY`            | no       | **`true`**    | Exactly `false` registers the five mailbox tools             |
+| `IMAP_READ_ONLY`            | no       | **`true`**    | Exactly `false` registers the six mailbox tools in this branch |
 | `IMAP_ALLOW_TOOLS`          | no       | —             | Tool names, `list_*` prefixes or `essential`                 |
 | `IMAP_DENY_TOOLS`           | no       | —             | Same syntax; subtracted from the allow list                  |
 | `IMAP_SEEN_KEYWORD`         | no       | `AiSeen`      | Keyword for new-mail tracking; empty turns it off            |
