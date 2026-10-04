@@ -1,6 +1,6 @@
 # Tools
 
-Eleven tools: six read, five write. The write tools are **not registered** unless
+Twelve tools: six read, six write. The write tools are **not registered** unless
 `IMAP_READ_ONLY=false` — and it defaults to `true`, so an unconfigured server offers
 the six read tools alone.
 
@@ -30,7 +30,8 @@ Registered only when `IMAP_READ_ONLY=false`.
 | `set_message_flags`    | Set or clear flags and keywords — read, flagged, and the assistant's own. **essential**  |
 | `move_messages` 👤     | Move or copy messages between folders. **essential**                                     |
 | `delete_messages` 👤   | Delete: sets `\Deleted` and expunges. Not the same as moving to Trash                    |
-| `save_draft`           | Append a draft to the drafts folder. This server never **sends** anything                |
+| `save_draft`           | Append a plain-text draft to the drafts folder. This server never **sends** anything     |
+| `save_lesekita_draft`  | Append the identity-bound LeseKita HTML/CID draft with the pinned inline signature image |
 | `manage_mailbox` 👤    | Create, rename and delete folders — 👤 for `delete`, 🔒 for `rename`, nothing for `create` |
 
 👤 **asks a person** through MCP elicitation, a dialog the model cannot answer on its
@@ -41,7 +42,7 @@ See [Asking a person](/guide/approval).
 Every tool declares an `outputSchema` and answers with `structuredContent` beside
 the text block, so a client can use a result without parsing prose. Every tool
 that reports anything out of the mailbox carries `untrusted: true` and
-`source: "imap"` as fields — only `get_server_info` and the five write tools are
+`source: "imap"` as fields — only `get_server_info` and the six write tools are
 without it. `get_message` and a text attachment keep the nonce fence in the text
 block and state the same fields in the structured half; an image attachment
 keeps its bytes in the content block rather than repeating the base64.
