@@ -42,6 +42,7 @@ export const WRITE_TOOLS = [
   'manage_mailbox',
   'move_messages',
   'save_draft',
+  'save_lesekita_draft',
   'set_message_flags',
 ] as const;
 
@@ -51,7 +52,7 @@ export const ALL_TOOLS: readonly string[] = [...READ_TOOLS, ...WRITE_TOOLS];
 /**
  * What `IMAP_ALLOW_TOOLS=essential` selects: find the mail, read it, file it.
  *
- * Six of eleven. Left out on purpose: `delete_messages` (irreversible),
+ * Six of twelve. Left out on purpose: `delete_messages` (irreversible),
  * `save_draft` (composing is a different job from triage), `get_attachments`
  * (large payloads, and the attachment resources cover the same ground), and
  * `get_server_info` and `manage_mailbox`, which are administrative.
