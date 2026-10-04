@@ -20,13 +20,26 @@ export interface DraftInput {
   date?: Date;
 }
 
-export interface LeseKitaBrandedDraftInput extends DraftInput {
-  logo: Buffer;
+export interface InlineImageInput {
+  filename: string;
+  contentType: 'image/png' | 'image/jpeg' | 'image/gif';
+  contentId: string;
+  content: Buffer;
 }
 
-export const LESEKITA_SIGNATURE_CONTENT_ID =
-  'lesekita-pia-signature-logo-v1';
-
+export interface RichDraftInput {
+  from: string | undefined;
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  bodyText: string;
+  bodyHtml: string;
+  inlineImages?: InlineImageInput[];
+  thread?: ThreadHeaders;
+  /** Injected by the tests; real calls stamp the current time. */
+  date?: Date;
+}
 
 /** Encoded-words must not exceed 75 characters including the delimiters. */
 const ENCODED_WORD_PAYLOAD = 45;
@@ -89,15 +102,11 @@ export function buildDraft(input: DraftInput): Buffer {
 }
 
 /**
- * Builds the dedicated LeseKita rich draft.
- *
- * The caller supplies only the business body and envelope. The identity-bound
- * signature and inline image are composed here so the client cannot silently
- * shorten, replace or omit the project signature.
+ * Builds a rich RFC 5322 draft with a plain-text fallback, HTML body and
+ * optional inline CID images. Branding and signature content are caller-owned;
+ * this layer only turns the approved representation into bounded MIME.
  */
-export function buildLeseKitaBrandedDraft(
-  input: LeseKitaBrandedDraftInput
-): Buffer {
+export function buildRichDraft(input: RichDraftInput): Buffer {
   const from = input.from;
   if (from === undefined || from === '') {
     throw new ToolInputError(
@@ -105,8 +114,79 @@ export function buildLeseKitaBrandedDraft(
     );
   }
 
+  const inlineImages = input.inlineImages ?? [];
+  if (inlineImages.length > 5) {
+    throw new ToolInputError(
+      'imap-mcp: a rich draft may contain at most 5 inline images.'
+    );
+  }
+
+  const contentIds = new Set<string>();
+  let inlineBytes = 0;
+  for (const image of inlineImages) {
+    if (!/^[A-Za-z0-9._@+-]{1,128}$/.test(image.contentId)) {
+      throw new ToolInputError(
+        'imap-mcp: inline image content_id must be a safe CID token.'
+      );
+    }
+    if (!/^[A-Za-z0-9._-]{1,200}$/.test(image.filename)) {
+      throw new ToolInputError(
+        'imap-mcp: inline image filename contains unsupported characters.'
+      );
+    }
+    if (!['image/png', 'image/jpeg', 'image/gif'].includes(image.contentType)) {
+      throw new ToolInputError(
+        'imap-mcp: inline images must be PNG, JPEG or GIF.'
+      );
+    }
+    if (contentIds.has(image.contentId)) {
+      throw new ToolInputError(
+        'imap-mcp: inline image content_id values must be unique.'
+      );
+    }
+    contentIds.add(image.contentId);
+    inlineBytes += image.content.length;
+    if (image.content.length > 1024 * 1024) {
+      throw new ToolInputError(
+        'imap-mcp: one inline image exceeds the 1 MiB limit.'
+      );
+    }
+  }
+  if (inlineBytes > 2 * 1024 * 1024) {
+    throw new ToolInputError(
+      'imap-mcp: inline images exceed the 2 MiB total limit.'
+    );
+  }
+
+  if (/<img\b[^>]*\bsrc\s*=\s*["']https?:/iu.test(input.bodyHtml)) {
+    throw new ToolInputError(
+      'imap-mcp: remote images are not allowed in rich drafts; use CID images.'
+    );
+  }
+
+  const cidRefs = [
+    ...input.bodyHtml.matchAll(/cid:([A-Za-z0-9._@+-]{1,128})/giu),
+  ].map((match) => match[1] as string);
+  const referenced = new Set(cidRefs);
+
+  for (const cid of referenced) {
+    if (!contentIds.has(cid)) {
+      throw new ToolInputError(
+        `imap-mcp: HTML references missing inline image content_id "${cid}".`
+      );
+    }
+  }
+  for (const cid of contentIds) {
+    if (!referenced.has(cid)) {
+      throw new ToolInputError(
+        `imap-mcp: inline image content_id "${cid}" is not referenced by the HTML.`
+      );
+    }
+  }
+
   const relatedBoundary = `related_${randomUUID().replaceAll('-', '')}`;
-  const alternativeBoundary = `alternative_${randomUUID().replaceAll('-', '')}`;
+  const alternativeBoundary =
+    `alternative_${randomUUID().replaceAll('-', '')}`;
 
   const headers: Array<[string, string]> = [
     ['From', from],
@@ -140,38 +220,7 @@ export function buildLeseKitaBrandedDraft(
     return `${name}: ${value}`;
   });
 
-  const businessBody = input.body.replace(/[\s\r\n]+$/u, '');
-  const signatureText = [
-    'Pia Löber-Wille',
-    'Beraterin',
-    'LeseKitas - Leseförderung am Übergang Kita zur Grundschule',
-    'Telefon: 0176/471 69 884',
-    'E-Mail: pia.loeber-wille@lesekitas.de',
-  ].join('\r\n');
-  const plain = `${businessBody}\r\n\r\n${signatureText}\r\n`;
-
-  const businessHtml = escapeHtml(businessBody).replace(
-    /\r\n|\r|\n/g,
-    '<br>\r\n'
-  );
-  const html = [
-    '<!doctype html>',
-    '<html><body>',
-    `<div style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#000;">${businessHtml}</div>`,
-    '<br>',
-    '<div style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#000;">',
-    '<strong>Pia Löber-Wille</strong><br>',
-    'Beraterin<br>',
-    'LeseKitas - Leseförderung am Übergang Kita zur Grundschule<br>',
-    'Telefon: 0176/471 69 884<br>',
-    'E-Mail: <a href="mailto:pia.loeber-wille@lesekitas.de">pia.loeber-wille@lesekitas.de</a>',
-    '</div>',
-    '<br>',
-    `<img src="cid:${LESEKITA_SIGNATURE_CONTENT_ID}" alt="LeseKitas" style="display:block;width:520px;max-width:100%;height:auto;border:0;">`,
-    '</body></html>',
-  ].join('\r\n');
-
-  const mime = [
+  const mime: string[] = [
     ...lines,
     '',
     `--${relatedBoundary}`,
@@ -181,40 +230,33 @@ export function buildLeseKitaBrandedDraft(
     'Content-Type: text/plain; charset=utf-8',
     'Content-Transfer-Encoding: base64',
     '',
-    encodeMimeBase64(Buffer.from(plain, 'utf-8')),
+    encodeMimeBase64(Buffer.from(input.bodyText, 'utf-8')),
     `--${alternativeBoundary}`,
     'Content-Type: text/html; charset=utf-8',
     'Content-Transfer-Encoding: base64',
     '',
-    encodeMimeBase64(Buffer.from(html, 'utf-8')),
+    encodeMimeBase64(Buffer.from(input.bodyHtml, 'utf-8')),
     `--${alternativeBoundary}--`,
-    `--${relatedBoundary}`,
-    'Content-Type: image/jpeg; name="lesekita-pia-signature-v1.jpg"',
-    'Content-Transfer-Encoding: base64',
-    'Content-Disposition: inline; filename="lesekita-pia-signature-v1.jpg"',
-    `Content-ID: <${LESEKITA_SIGNATURE_CONTENT_ID}>`,
-    '',
-    encodeMimeBase64(input.logo),
-    `--${relatedBoundary}--`,
-    '',
-  ].join('\r\n');
+  ];
 
-  return Buffer.from(mime, 'utf-8');
+  for (const image of inlineImages) {
+    mime.push(
+      `--${relatedBoundary}`,
+      `Content-Type: ${image.contentType}; name="${image.filename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: inline; filename="${image.filename}"`,
+      `Content-ID: <${image.contentId}>`,
+      '',
+      encodeMimeBase64(image.content)
+    );
+  }
+
+  mime.push(`--${relatedBoundary}--`, '');
+  return Buffer.from(mime.join('\r\n'), 'utf-8');
 }
 
 function encodeMimeBase64(value: Buffer): string {
-  return value
-    .toString('base64')
-    .replace(/(.{76})/g, '$1\r\n');
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return value.toString('base64').replace(/(.{76})/g, '$1\r\n');
 }
 
 /** Keep every folded header line under the RFC 5322 hard limit of 998 octets. */
