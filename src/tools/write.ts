@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { confirmationPrompt, setResourceKey } from 'mcp-approval';
@@ -17,7 +20,11 @@ import { audit } from '../audit.js';
 import type { Config } from '../config.js';
 import { ToolInputError } from '../errors.js';
 import { ImapClient, withTimeout } from '../imap.js';
-import { buildDraft } from '../draft.js';
+import {
+  buildDraft,
+  buildLeseKitaBrandedDraft,
+  LESEKITA_SIGNATURE_CONTENT_ID,
+} from '../draft.js';
 import { errorResult, jsonResult, run } from '../result.js';
 
 /**
@@ -37,6 +44,23 @@ function shownValue(raw: string): string {
   return visible === raw
     ? raw
     : `${visible} — as written: ${escapeInvisible(raw)}`;
+}
+
+const LESEKITA_IDENTITY = 'pia.loeber-wille@lesekitas.de';
+const LESEKITA_SIGNATURE_SHA256 =
+  '1dd7a6d74947d2615cf868bc19cc020fa9f022b94cf6e44630fb03cc9407adb3';
+
+async function loadLeseKitaSignatureLogo(): Promise<Buffer> {
+  const logo = await readFile(
+    new URL('../../assets/lesekita-pia-signature-v1.jpg', import.meta.url)
+  );
+  const actual = createHash('sha256').update(logo).digest('hex');
+  if (actual !== LESEKITA_SIGNATURE_SHA256) {
+    throw new ToolInputError(
+      'imap-mcp: the installed LeseKita signature image does not match the pinned profile.'
+    );
+  }
+  return logo;
 }
 
 export function registerWriteTools(
@@ -529,6 +553,104 @@ export function registerWriteTools(
           mailbox: folder,
           recipients: [...to, ...(cc ?? []), ...(bcc ?? [])],
           note: 'The draft is stored but not sent. This server has no way to send mail; open it in your mail client to send it.',
+        });
+      })
+  );
+
+  server.registerTool(
+    'save_lesekita_draft',
+    {
+      title: 'Save a LeseKita branded draft',
+      description:
+        'Composes a draft for Pia\'s dedicated LeseKita mailbox with the fixed ' +
+        'LeseKitas HTML signature and canonical inline image. The caller ' +
+        'supplies only the business body and envelope. This server still ' +
+        'cannot send mail; the message remains in Drafts for human review.',
+      inputSchema: z.object({
+        to: addressListParam,
+        cc: addressListParam.optional(),
+        bcc: addressListParam.optional(),
+        subject: z
+          .string()
+          .max(500)
+          .refine((v) => !/[\r\n]/.test(v), 'must not contain line breaks')
+          .describe('Subject line.'),
+        body: z
+          .string()
+          .min(1)
+          .max(100_000)
+          .describe(
+            'Plain-text business body only. The canonical LeseKita signature is appended server-side.'
+          ),
+        reply_to_uid: uidParam
+          .optional()
+          .describe(
+            'UID of the message being answered; threads the draft through In-Reply-To and References.'
+          ),
+        mailbox: optionalMailboxParam.describe(
+          'Where to look for reply_to_uid. Defaults to the configured mailbox.'
+        ),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+      outputSchema: z.object({
+        action: z.literal('lesekita_draft_saved'),
+        mailbox: z.string(),
+        recipients: z.array(z.string()),
+        signature_profile: z.literal('lesekita-pia-v1'),
+        content_id: z.literal(LESEKITA_SIGNATURE_CONTENT_ID),
+        note: z.string(),
+      }),
+    },
+    async ({ to, cc, bcc, subject, body, reply_to_uid, mailbox }) =>
+      run(async () => {
+        if ((client.user ?? '').toLowerCase() !== LESEKITA_IDENTITY) {
+          throw new ToolInputError(
+            'imap-mcp: save_lesekita_draft is bound to pia.loeber-wille@lesekitas.de.'
+          );
+        }
+
+        const thread =
+          reply_to_uid === undefined
+            ? undefined
+            : await client.threadHeaders(mailbox, reply_to_uid);
+        const logo = await loadLeseKitaSignatureLogo();
+
+        const draft = buildLeseKitaBrandedDraft({
+          from: client.user,
+          to,
+          ...(cc === undefined ? {} : { cc }),
+          ...(bcc === undefined ? {} : { bcc }),
+          subject,
+          body,
+          logo,
+          ...(thread === undefined ? {} : { thread }),
+        });
+
+        const folder = await resolveDraftsMailbox(client, config);
+        await client.withConnection(async (connection) => {
+          await withTimeout(
+            connection.append(folder, draft, ['\\Draft', '\\Seen']),
+            'APPEND'
+          );
+        });
+        audit('save_lesekita_draft', {
+          mailbox: folder,
+          recipients: to.length + (cc?.length ?? 0) + (bcc?.length ?? 0),
+          in_reply_to: thread?.messageId,
+          signature_profile: 'lesekita-pia-v1',
+        });
+        return jsonResult({
+          action: 'lesekita_draft_saved' as const,
+          mailbox: folder,
+          recipients: [...to, ...(cc ?? []), ...(bcc ?? [])],
+          signature_profile: 'lesekita-pia-v1' as const,
+          content_id: LESEKITA_SIGNATURE_CONTENT_ID,
+          note: 'The branded LeseKita draft is stored but not sent. This server has no way to send mail.',
         });
       })
   );
