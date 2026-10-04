@@ -52,14 +52,13 @@ message in the inbox — the pattern that produced
 [EchoLeak](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2025-32711), where one
 crafted email exfiltrated internal data from Microsoft 365 Copilot with no user interaction.
 This server has the first two and deliberately not the third. `save_draft` writes a plain-text reply
-into your Drafts folder; the downstream-only `save_lesekita_draft` writes an identity-bound HTML/CID
-LeseKita draft with the pinned signature image. Neither tool can send. You send from your own mail
+into your Drafts folder; the downstream-only `save_rich_draft` writes a caller-supplied HTML/CID draft with bounded inline images. Neither tool can send. You send from your own mail
 client. No amount of clever text in a message can make this server post anything anywhere.
 
 **Writes are off until you turn them on.** With only `IMAP_HOST`, `IMAP_USER` and
 `IMAP_PASSWORD` set, the server registers six read tools and nothing else. The mailbox tools
 appear with `IMAP_READ_ONLY=false` — note the default is `true`, the opposite of the other
-servers in this family, because this one reaches a mailbox. In this LeseKita downstream branch that means six write tools. Tools that are off are not registered at all — a
+servers in this family, because this one reaches a mailbox. In this downstream branch that means six write tools. Tools that are off are not registered at all — a
 capability the model cannot see is one it cannot be talked into using.
 
 **Mail is treated as hostile input, because it is.** Anyone in the world can put text in your
