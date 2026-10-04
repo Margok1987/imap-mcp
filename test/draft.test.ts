@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  buildDraft,
-  buildLeseKitaBrandedDraft,
-  encodeHeaderValue,
-  LESEKITA_SIGNATURE_CONTENT_ID,
-} from '../src/draft.js';
+import { buildDraft, buildRichDraft, encodeHeaderValue } from '../src/draft.js';
 import { ToolInputError } from '../src/errors.js';
 
 import { call, connect, jsonOf, textOf } from './harness.js';
@@ -125,47 +120,94 @@ describe('buildDraft', () => {
   });
 });
 
-describe('buildLeseKitaBrandedDraft', () => {
-  it('builds multipart text/html with one inline CID image', () => {
-    const logo = Buffer.from('jpeg-fixture');
-    const raw = buildLeseKitaBrandedDraft({
-      ...base,
-      body: 'Hallo & <Pia>',
-      logo,
+describe('buildRichDraft', () => {
+  it('builds multipart text/html with caller-supplied inline CID images', () => {
+    const image = Buffer.from('jpeg-fixture');
+    const raw = buildRichDraft({
+      from: base.from,
+      to: base.to,
+      subject: base.subject,
+      bodyText: 'Hallo',
+      bodyHtml: '<p>Hallo</p><img src="cid:signature-v1">',
+      inlineImages: [
+        {
+          filename: 'signature.jpg',
+          contentType: 'image/jpeg',
+          contentId: 'signature-v1',
+          content: image,
+        },
+      ],
+      date: base.date,
     }).toString('utf-8');
 
     expect(raw).toContain('Content-Type: multipart/related;');
     expect(raw).toContain('Content-Type: multipart/alternative;');
+    expect(raw).toContain('Content-ID: <signature-v1>');
     expect(raw).toContain(
-      `Content-ID: <${LESEKITA_SIGNATURE_CONTENT_ID}>`
+      'Content-Disposition: inline; filename="signature.jpg"'
     );
-    expect(raw).toContain(
-      'Content-Disposition: inline; filename="lesekita-pia-signature-v1.jpg"'
-    );
-    expect(raw).toContain(logo.toString('base64'));
-    expect(raw).not.toContain('Hallo & <Pia>');
+    expect(raw).toContain(image.toString('base64'));
   });
 
-  it('keeps MIME lines inside the RFC line limit', () => {
-    const raw = buildLeseKitaBrandedDraft({
-      ...base,
-      body: 'ä'.repeat(5000),
-      logo: Buffer.alloc(4096, 0x5a),
-    }).toString('utf-8');
+  it('refuses HTML whose CID image was not supplied', () => {
+    expect(() =>
+      buildRichDraft({
+        from: base.from,
+        to: base.to,
+        subject: base.subject,
+        bodyText: 'Hallo',
+        bodyHtml: '<img src="cid:missing">',
+        date: base.date,
+      })
+    ).toThrow(/missing inline image/);
+  });
 
-    for (const line of raw.split('\r\n')) {
-      expect(line.length).toBeLessThanOrEqual(998);
-    }
+  it('refuses an unreferenced inline image', () => {
+    expect(() =>
+      buildRichDraft({
+        from: base.from,
+        to: base.to,
+        subject: base.subject,
+        bodyText: 'Hallo',
+        bodyHtml: '<p>Hallo</p>',
+        inlineImages: [
+          {
+            filename: 'signature.jpg',
+            contentType: 'image/jpeg',
+            contentId: 'signature-v1',
+            content: Buffer.from('x'),
+          },
+        ],
+        date: base.date,
+      })
+    ).toThrow(/not referenced/);
+  });
+
+  it('refuses remote image sources', () => {
+    expect(() =>
+      buildRichDraft({
+        from: base.from,
+        to: base.to,
+        subject: base.subject,
+        bodyText: 'Hallo',
+        bodyHtml: '<img src="https://example.invalid/tracker.png">',
+        date: base.date,
+      })
+    ).toThrow(/remote images/);
   });
 
   it('preserves reply threading headers', () => {
-    const raw = buildLeseKitaBrandedDraft({
-      ...base,
-      logo: Buffer.from('x'),
+    const raw = buildRichDraft({
+      from: base.from,
+      to: base.to,
+      subject: base.subject,
+      bodyText: 'Hallo',
+      bodyHtml: '<p>Hallo</p>',
       thread: {
         messageId: '<3@example.net>',
         references: ['<1@example.net>', '<3@example.net>'],
       },
+      date: base.date,
     }).toString('utf-8');
 
     expect(raw).toContain('In-Reply-To: <3@example.net>');
@@ -328,52 +370,58 @@ describe('save_draft', () => {
   });
 });
 
-describe('save_lesekita_draft', () => {
-  const writeConfig = {
-    readOnly: false,
-    imap: { user: 'pia.loeber-wille@lesekitas.de' } as never,
-  };
+describe('save_rich_draft', () => {
+  const writeConfig = { readOnly: false };
 
-  it('appends a threaded rich draft with the fixed CID signature', async () => {
+  it('appends a threaded rich draft with supplied HTML and CID image', async () => {
     const harness = await connect({ config: writeConfig });
-    const result = await call(harness.client, 'save_lesekita_draft', {
+    const result = await call(harness.client, 'save_rich_draft', {
       to: ['anna@example.net'],
       subject: 'Re: Please review',
-      body: 'Danke, das passt.',
+      body_text: 'Danke, das passt.',
+      body_html: '<p>Danke, das passt.</p><img src="cid:signature-v1">',
+      inline_images: [
+        {
+          filename: 'signature.jpg',
+          content_type: 'image/jpeg',
+          content_id: 'signature-v1',
+          content_base64: Buffer.from('jpeg-fixture').toString('base64'),
+        },
+      ],
       reply_to_uid: 3,
     });
 
     expect(jsonOf(result)).toMatchObject({
-      action: 'lesekita_draft_saved',
+      action: 'rich_draft_saved',
       mailbox: 'Drafts',
-      signature_profile: 'lesekita-pia-v1',
-      content_id: LESEKITA_SIGNATURE_CONTENT_ID,
+      inline_image_count: 1,
     });
     const raw = harness.imap.appended[0]?.content.toString('utf-8') ?? '';
-    expect(raw).toContain('Content-Type: multipart/related;');
     expect(raw).toContain('Content-Type: text/html; charset=utf-8');
-    expect(raw).toContain(
-      `Content-ID: <${LESEKITA_SIGNATURE_CONTENT_ID}>`
-    );
+    expect(raw).toContain('Content-ID: <signature-v1>');
     expect(raw).toContain('In-Reply-To: <3@example.net>');
-    expect(raw).toContain('pia.loeber-wille@lesekitas.de');
     await harness.close();
   });
 
-  it('fails closed on any other configured mailbox identity', async () => {
-    const harness = await connect({ config: { readOnly: false } });
-    const result = await call(harness.client, 'save_lesekita_draft', {
+  it('rejects malformed base64 before APPEND', async () => {
+    const harness = await connect({ config: writeConfig });
+    const result = await call(harness.client, 'save_rich_draft', {
       to: ['anna@example.net'],
       subject: 'Hi',
-      body: 'Text.',
+      body_text: 'Text.',
+      body_html: '<img src="cid:signature-v1">',
+      inline_images: [
+        {
+          filename: 'signature.jpg',
+          content_type: 'image/jpeg',
+          content_id: 'signature-v1',
+          content_base64: 'not-base64!',
+        },
+      ],
     });
 
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain(
-      'bound to pia.loeber-wille@lesekitas.de'
-    );
     expect(harness.imap.appended).toHaveLength(0);
     await harness.close();
   });
 });
-
