@@ -32,6 +32,7 @@ const WRITE_TOOLS = [
   'manage_mailbox',
   'move_messages',
   'save_draft',
+  'save_lesekita_draft',
   'set_message_flags',
 ];
 
@@ -50,10 +51,10 @@ describe('tool registration', () => {
     await harness.close();
   });
 
-  it('registers 11 tools when writing is enabled, and never a sending one', async () => {
+  it('registers 12 tools when writing is enabled, and never a sending one', async () => {
     const harness = await connect({ config: { readOnly: false } });
     const names = await toolNames(harness.client);
-    expect(names).toHaveLength(11);
+    expect(names).toHaveLength(12);
     // The load-bearing property of this server: it has no way to send mail, so
     // an injected instruction has nothing here to exfiltrate through.
     expect(names.join(' ')).not.toMatch(
@@ -160,6 +161,7 @@ describe('tool registration', () => {
       'manage_mailbox',
       'move_messages',
       'save_draft',
+      'save_lesekita_draft',
       'set_message_flags',
     ]);
     await harness.close();
@@ -203,6 +205,7 @@ describe('tool registration', () => {
     // reference to the old ones stops working.
     expect(byName.get('move_messages')?.destructiveHint).toBe(true);
     expect(byName.get('save_draft')?.destructiveHint).toBe(false);
+    expect(byName.get('save_lesekita_draft')?.destructiveHint).toBe(false);
     await harness.close();
   });
 
