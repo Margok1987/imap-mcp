@@ -2,7 +2,7 @@
   "name": "@ni-c/imap-mcp",
   "version": "0.5.1",
   "mcpName": "io.github.ni-c/imap-mcp",
-  "description": "Downstream IMAP MCP fork for the LeseKita mailbox: read, search, organise and draft mail — it deliberately cannot send",
+  "description": "Downstream IMAP MCP fork used by the LeseKita mailbox: read, search, organise and create plain or rich drafts — it deliberately cannot send",
   "keywords": [
     "mcp",
     "model-context-protocol",
@@ -33,8 +33,7 @@
   "main": "dist/index.js",
   "files": [
     "dist",
-    "!dist/**/*.map",
-    "assets"
+    "!dist/**/*.map"
   ],
   "engines": {
     "node": ">=22"
