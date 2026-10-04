@@ -20,6 +20,14 @@ export interface DraftInput {
   date?: Date;
 }
 
+export interface LeseKitaBrandedDraftInput extends DraftInput {
+  logo: Buffer;
+}
+
+export const LESEKITA_SIGNATURE_CONTENT_ID =
+  'lesekita-pia-signature-logo-v1';
+
+
 /** Encoded-words must not exceed 75 characters including the delimiters. */
 const ENCODED_WORD_PAYLOAD = 45;
 
@@ -78,6 +86,135 @@ export function buildDraft(input: DraftInput): Buffer {
     .replace(/(.{76})/g, '$1\r\n');
 
   return Buffer.from(`${lines.join('\r\n')}\r\n\r\n${encoded}\r\n`, 'utf-8');
+}
+
+/**
+ * Builds the dedicated LeseKita rich draft.
+ *
+ * The caller supplies only the business body and envelope. The identity-bound
+ * signature and inline image are composed here so the client cannot silently
+ * shorten, replace or omit the project signature.
+ */
+export function buildLeseKitaBrandedDraft(
+  input: LeseKitaBrandedDraftInput
+): Buffer {
+  const from = input.from;
+  if (from === undefined || from === '') {
+    throw new ToolInputError(
+      'imap-mcp: no sender address available — IMAP_USER is not set.'
+    );
+  }
+
+  const relatedBoundary = `related_${randomUUID().replaceAll('-', '')}`;
+  const alternativeBoundary = `alternative_${randomUUID().replaceAll('-', '')}`;
+
+  const headers: Array<[string, string]> = [
+    ['From', from],
+    ['To', input.to.join(', ')],
+  ];
+  if (input.cc !== undefined && input.cc.length > 0) {
+    headers.push(['Cc', input.cc.join(', ')]);
+  }
+  if (input.bcc !== undefined && input.bcc.length > 0) {
+    headers.push(['Bcc', input.bcc.join(', ')]);
+  }
+  headers.push(['Subject', encodeHeaderValue(input.subject)]);
+  headers.push(['Date', (input.date ?? new Date()).toUTCString()]);
+  headers.push(['Message-ID', `<${randomUUID()}@imap-mcp.invalid>`]);
+
+  if (input.thread?.messageId !== undefined) {
+    headers.push(['In-Reply-To', input.thread.messageId]);
+  }
+  if (input.thread !== undefined && input.thread.references.length > 0) {
+    headers.push(['References', foldReferences(input.thread.references)]);
+  }
+
+  headers.push(['MIME-Version', '1.0']);
+  headers.push([
+    'Content-Type',
+    `multipart/related; boundary="${relatedBoundary}"`,
+  ]);
+
+  const lines = headers.map(([name, value]) => {
+    assertHeaderSafe(name, value);
+    return `${name}: ${value}`;
+  });
+
+  const businessBody = input.body.replace(/[\s\r\n]+$/u, '');
+  const signatureText = [
+    'Pia Löber-Wille',
+    'Beraterin',
+    'LeseKitas - Leseförderung am Übergang Kita zur Grundschule',
+    'Telefon: 0176/471 69 884',
+    'E-Mail: pia.loeber-wille@lesekitas.de',
+  ].join('\r\n');
+  const plain = `${businessBody}\r\n\r\n${signatureText}\r\n`;
+
+  const businessHtml = escapeHtml(businessBody).replace(
+    /\r\n|\r|\n/g,
+    '<br>\r\n'
+  );
+  const html = [
+    '<!doctype html>',
+    '<html><body>',
+    `<div style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#000;">${businessHtml}</div>`,
+    '<br>',
+    '<div style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#000;">',
+    '<strong>Pia Löber-Wille</strong><br>',
+    'Beraterin<br>',
+    'LeseKitas - Leseförderung am Übergang Kita zur Grundschule<br>',
+    'Telefon: 0176/471 69 884<br>',
+    'E-Mail: <a href="mailto:pia.loeber-wille@lesekitas.de">pia.loeber-wille@lesekitas.de</a>',
+    '</div>',
+    '<br>',
+    `<img src="cid:${LESEKITA_SIGNATURE_CONTENT_ID}" alt="LeseKitas" style="display:block;width:520px;max-width:100%;height:auto;border:0;">`,
+    '</body></html>',
+  ].join('\r\n');
+
+  const mime = [
+    ...lines,
+    '',
+    `--${relatedBoundary}`,
+    `Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`,
+    '',
+    `--${alternativeBoundary}`,
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    encodeMimeBase64(Buffer.from(plain, 'utf-8')),
+    `--${alternativeBoundary}`,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    encodeMimeBase64(Buffer.from(html, 'utf-8')),
+    `--${alternativeBoundary}--`,
+    `--${relatedBoundary}`,
+    'Content-Type: image/jpeg; name="lesekita-pia-signature-v1.jpg"',
+    'Content-Transfer-Encoding: base64',
+    'Content-Disposition: inline; filename="lesekita-pia-signature-v1.jpg"',
+    `Content-ID: <${LESEKITA_SIGNATURE_CONTENT_ID}>`,
+    '',
+    encodeMimeBase64(input.logo),
+    `--${relatedBoundary}--`,
+    '',
+  ].join('\r\n');
+
+  return Buffer.from(mime, 'utf-8');
+}
+
+function encodeMimeBase64(value: Buffer): string {
+  return value
+    .toString('base64')
+    .replace(/(.{76})/g, '$1\r\n');
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /** Keep every folded header line under the RFC 5322 hard limit of 998 octets. */
