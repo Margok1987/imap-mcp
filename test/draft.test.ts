@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildDraft, encodeHeaderValue } from '../src/draft.js';
+import {
+  buildDraft,
+  buildLeseKitaBrandedDraft,
+  encodeHeaderValue,
+  LESEKITA_SIGNATURE_CONTENT_ID,
+} from '../src/draft.js';
 import { ToolInputError } from '../src/errors.js';
 
 import { call, connect, jsonOf, textOf } from './harness.js';
@@ -117,6 +122,54 @@ describe('buildDraft', () => {
         to: ['a@example.net\r\nBcc: attacker@example.org'],
       })
     ).toThrow(ToolInputError);
+  });
+});
+
+describe('buildLeseKitaBrandedDraft', () => {
+  it('builds multipart text/html with one inline CID image', () => {
+    const logo = Buffer.from('jpeg-fixture');
+    const raw = buildLeseKitaBrandedDraft({
+      ...base,
+      body: 'Hallo & <Pia>',
+      logo,
+    }).toString('utf-8');
+
+    expect(raw).toContain('Content-Type: multipart/related;');
+    expect(raw).toContain('Content-Type: multipart/alternative;');
+    expect(raw).toContain(
+      `Content-ID: <${LESEKITA_SIGNATURE_CONTENT_ID}>`
+    );
+    expect(raw).toContain(
+      'Content-Disposition: inline; filename="lesekita-pia-signature-v1.jpg"'
+    );
+    expect(raw).toContain(logo.toString('base64'));
+    expect(raw).not.toContain('Hallo & <Pia>');
+  });
+
+  it('keeps MIME lines inside the RFC line limit', () => {
+    const raw = buildLeseKitaBrandedDraft({
+      ...base,
+      body: 'ä'.repeat(5000),
+      logo: Buffer.alloc(4096, 0x5a),
+    }).toString('utf-8');
+
+    for (const line of raw.split('\r\n')) {
+      expect(line.length).toBeLessThanOrEqual(998);
+    }
+  });
+
+  it('preserves reply threading headers', () => {
+    const raw = buildLeseKitaBrandedDraft({
+      ...base,
+      logo: Buffer.from('x'),
+      thread: {
+        messageId: '<3@example.net>',
+        references: ['<1@example.net>', '<3@example.net>'],
+      },
+    }).toString('utf-8');
+
+    expect(raw).toContain('In-Reply-To: <3@example.net>');
+    expect(raw).toContain('References: <1@example.net> <3@example.net>');
   });
 });
 
