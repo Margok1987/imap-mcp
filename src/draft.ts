@@ -185,8 +185,7 @@ export function buildRichDraft(input: RichDraftInput): Buffer {
   }
 
   const relatedBoundary = `related_${randomUUID().replaceAll('-', '')}`;
-  const alternativeBoundary =
-    `alternative_${randomUUID().replaceAll('-', '')}`;
+  const alternativeBoundary = `alternative_${randomUUID().replaceAll('-', '')}`;
 
   const headers: Array<[string, string]> = [
     ['From', from],

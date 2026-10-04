@@ -554,12 +554,16 @@ export function registerWriteTools(
           .string()
           .min(1)
           .max(100_000)
-          .describe('Plain-text fallback including the approved signature text.'),
+          .describe(
+            'Plain-text fallback including the approved signature text.'
+          ),
         body_html: z
           .string()
           .min(1)
           .max(200_000)
-          .describe('Complete approved HTML body. Inline images must use cid: references.'),
+          .describe(
+            'Complete approved HTML body. Inline images must use cid: references.'
+          ),
         inline_images: z
           .array(
             z.object({
@@ -573,12 +577,16 @@ export function registerWriteTools(
               content_id: z
                 .string()
                 .regex(/^[A-Za-z0-9._@+-]{1,128}$/)
-                .describe('CID token referenced from the HTML as cid:<content_id>.'),
+                .describe(
+                  'CID token referenced from the HTML as cid:<content_id>.'
+                ),
               content_base64: z
                 .string()
                 .min(1)
                 .max(1_500_000)
-                .describe('Canonical base64 image bytes, without a data: prefix.'),
+                .describe(
+                  'Canonical base64 image bytes, without a data: prefix.'
+                ),
             })
           )
           .max(5)
