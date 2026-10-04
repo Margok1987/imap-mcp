@@ -327,3 +327,53 @@ describe('save_draft', () => {
     await harness.close();
   });
 });
+
+describe('save_lesekita_draft', () => {
+  const writeConfig = {
+    readOnly: false,
+    imap: { user: 'pia.loeber-wille@lesekitas.de' } as never,
+  };
+
+  it('appends a threaded rich draft with the fixed CID signature', async () => {
+    const harness = await connect({ config: writeConfig });
+    const result = await call(harness.client, 'save_lesekita_draft', {
+      to: ['anna@example.net'],
+      subject: 'Re: Please review',
+      body: 'Danke, das passt.',
+      reply_to_uid: 3,
+    });
+
+    expect(jsonOf(result)).toMatchObject({
+      action: 'lesekita_draft_saved',
+      mailbox: 'Drafts',
+      signature_profile: 'lesekita-pia-v1',
+      content_id: LESEKITA_SIGNATURE_CONTENT_ID,
+    });
+    const raw = harness.imap.appended[0]?.content.toString('utf-8') ?? '';
+    expect(raw).toContain('Content-Type: multipart/related;');
+    expect(raw).toContain('Content-Type: text/html; charset=utf-8');
+    expect(raw).toContain(
+      `Content-ID: <${LESEKITA_SIGNATURE_CONTENT_ID}>`
+    );
+    expect(raw).toContain('In-Reply-To: <3@example.net>');
+    expect(raw).toContain('pia.loeber-wille@lesekitas.de');
+    await harness.close();
+  });
+
+  it('fails closed on any other configured mailbox identity', async () => {
+    const harness = await connect({ config: { readOnly: false } });
+    const result = await call(harness.client, 'save_lesekita_draft', {
+      to: ['anna@example.net'],
+      subject: 'Hi',
+      body: 'Text.',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain(
+      'bound to pia.loeber-wille@lesekitas.de'
+    );
+    expect(harness.imap.appended).toHaveLength(0);
+    await harness.close();
+  });
+});
+
