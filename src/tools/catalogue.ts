@@ -42,7 +42,7 @@ export const WRITE_TOOLS = [
   'manage_mailbox',
   'move_messages',
   'save_draft',
-  'save_lesekita_draft',
+  'save_rich_draft',
   'set_message_flags',
 ] as const;
 
