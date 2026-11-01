@@ -5,20 +5,6 @@ name: Docs
 # broken page cannot reach the published site.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'docs/**'
-      - 'CHANGELOG.md'
-      # The nav version is read from here at build time.
-      - 'package.json'
-      - '.github/workflows/docs.yml'
-  pull_request:
-    paths:
-      - 'docs/**'
-      - 'CHANGELOG.md'
-      - 'package.json'
-      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 concurrency:
