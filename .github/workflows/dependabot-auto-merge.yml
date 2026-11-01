@@ -24,7 +24,8 @@ name: Dependabot auto-merge
 # for it, and a bad VitePress bump could reach the published site unseen. That is one
 # PR a week at most; it can have a human look.
 
-on: pull_request
+on:
+  workflow_dispatch:
 
 permissions:
   contents: read
