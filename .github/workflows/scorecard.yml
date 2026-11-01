@@ -19,10 +19,6 @@
 name: Scorecard
 
 on:
-  schedule:
-    - cron: '30 5 * * 1' # Mondays, ahead of the weekly npm audit at 06:00
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
